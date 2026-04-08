@@ -16,80 +16,82 @@ import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
 import ExameAudiometrico from "./pages/ExameAudiometrico";
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 
-// Hook to get Supabase session
-function useSupabaseSession() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+// ─── Global Session Context ───────────────────────────────────────────────────
+// Single source of truth for auth state. Initialized once at app root.
+// All components read from this context instead of calling getSession() again.
+
+type SessionContextType = {
+  session: Session | null;
+  loading: boolean;
+};
+
+const SessionContext = createContext<SessionContextType>({
+  session: null,
+  loading: true,
+});
+
+export function useSession() {
+  return useContext(SessionContext);
+}
+
+function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    // 2. Listen for all auth changes (login, logout, token refresh, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        // Only flip loading on the very first event if still loading
+        setLoading(false);
+      }
+    );
 
     return () => subscription.unsubscribe();
   }, []);
 
-  return { session, loading: session === undefined };
+  return (
+    <SessionContext.Provider value={{ session, loading }}>
+      {children}
+    </SessionContext.Provider>
+  );
 }
 
-/**
- * Auth callback handler — processes Supabase email confirmation redirect.
- * Supabase sends the user here with #access_token=...&type=signup in the URL hash.
- * The Supabase client (detectSessionInUrl: true) automatically picks up the token
- * from the hash and establishes the session. We just wait for it and redirect.
- */
+// ─── Auth Callback ────────────────────────────────────────────────────────────
+
 function AuthCallback() {
   const [, navigate] = useLocation();
+  const { session, loading } = useSession();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Give Supabase client time to process the hash fragment
-    const handleCallback = async () => {
-      try {
-        // The Supabase client auto-detects tokens in the URL hash.
-        // We just need to wait for the session to be established.
-        const { data: { session }, error } = await supabase.auth.getSession();
+    if (loading) return;
 
-        if (error) {
-          console.error("[AuthCallback] Error:", error.message);
-          setError(error.message);
-          return;
-        }
+    if (session) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
 
-        if (session) {
-          navigate("/dashboard", { replace: true });
-        } else {
-          // If no session yet, listen for the auth state change
-          const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            (event, session) => {
-              if (session) {
-                subscription.unsubscribe();
-                navigate("/dashboard", { replace: true });
-              }
-            }
-          );
-
-          // Timeout: if no session after 5s, redirect to login
-          setTimeout(() => {
-            subscription.unsubscribe();
-            navigate("/login", { replace: true });
-          }, 5000);
-        }
-      } catch (err) {
-        console.error("[AuthCallback] Unexpected error:", err);
-        setError("Erro ao processar confirmação. Tente fazer login.");
+    // If session not ready yet, wait for onAuthStateChange to fire
+    const timeout = setTimeout(() => {
+      if (!session) {
+        setError("Erro ao confirmar email. Tente fazer login.");
       }
-    };
+    }, 5000);
 
-    handleCallback();
-  }, [navigate]);
+    return () => clearTimeout(timeout);
+  }, [session, loading, navigate]);
 
   if (error) {
     return (
@@ -112,18 +114,15 @@ function AuthCallback() {
   );
 }
 
-// Redireciona / para /login (não autenticado) ou /dashboard (autenticado)
+// ─── Route Guards ─────────────────────────────────────────────────────────────
+
 function RootRedirect() {
-  const { session, loading } = useSupabaseSession();
+  const { session, loading } = useSession();
   const [, navigate] = useLocation();
 
   useEffect(() => {
     if (loading) return;
-    if (session) {
-      navigate("/dashboard", { replace: true });
-    } else {
-      navigate("/login", { replace: true });
-    }
+    navigate(session ? "/dashboard" : "/login", { replace: true });
   }, [session, loading, navigate]);
 
   return (
@@ -133,14 +132,13 @@ function RootRedirect() {
   );
 }
 
-// Protected route wrapper: redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useSupabaseSession();
+  const { session, loading } = useSession();
   const [, navigate] = useLocation();
 
   useEffect(() => {
     if (!loading && !session) {
-      navigate("/login");
+      navigate("/login", { replace: true });
     }
   }, [session, loading, navigate]);
 
@@ -159,6 +157,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   return <AppLayout>{children}</AppLayout>;
 }
+
+// ─── Router ───────────────────────────────────────────────────────────────────
 
 function Router() {
   return (
@@ -203,14 +203,18 @@ function Router() {
   );
 }
 
+// ─── App ──────────────────────────────────────────────────────────────────────
+
 function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <SessionProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </SessionProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

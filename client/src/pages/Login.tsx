@@ -4,6 +4,7 @@ import { Eye, EyeOff, Loader2, Headphones } from "lucide-react";
 import { toast } from "sonner";
 import { AudioWaves } from "@/components/AudioWaves";
 import { supabase } from "@/lib/supabase";
+import { useSession } from "@/App";
 
 function useRipple() {
   const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
@@ -26,25 +27,15 @@ export default function Login() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const { session, loading: checkingSession } = useSession();
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { ripples: btnRipples, addRipple: addBtnRipple } = useRipple();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate("/dashboard");
-      } else {
-        setCheckingSession(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) navigate("/dashboard");
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    if (!checkingSession && session) {
+      navigate("/dashboard");
+    }
+  }, [session, checkingSession, navigate]);
 
   useEffect(() => {
     if (email || password) {

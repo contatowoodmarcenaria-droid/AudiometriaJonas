@@ -19,7 +19,7 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!isUnauthorized) return;
 
   const currentPath = window.location.pathname;
-  const publicPaths = ['/', '/login', '/signup'];
+  const publicPaths = ['/', '/login', '/signup', '/auth/callback'];
   if (!publicPaths.includes(currentPath)) {
     window.location.href = '/login';
   }

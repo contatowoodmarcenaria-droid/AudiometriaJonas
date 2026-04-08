@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
-import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { useSession } from "@/App";
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -50,7 +50,8 @@ function UserAvatar({ name, size = "md" }: { name?: string | null; size?: "sm" |
 }
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
+  const { session } = useSession();
+  const supabaseUser = session?.user ?? null;
   const [location, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -126,18 +127,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       setActiveIndex(-1);
     }
   };
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSupabaseUser(session?.user ?? null);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSupabaseUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   const { data: alertasData } = trpc.alertas.list.useQuery({ lido: false }, { enabled: !!supabaseUser });
   const unreadCount = alertasData?.length ?? 0;
