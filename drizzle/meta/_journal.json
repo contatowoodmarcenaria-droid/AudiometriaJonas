@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1775261671315,
+      "tag": "0000_petite_marauders",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1775261909719,
+      "tag": "0001_breezy_morbius",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775264946938,
+      "tag": "0002_typical_cargill",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1775423463151,
+      "tag": "0003_fresh_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775432161604,
+      "tag": "0004_colorful_iron_lad",
+      "breakpoints": true
+    }
+  ]
+}

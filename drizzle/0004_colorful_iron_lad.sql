@@ -1,0 +1,1 @@
+ALTER TABLE `colaboradores` ADD `codigo` varchar(16);
