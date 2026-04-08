@@ -66,10 +66,19 @@ function AuthCallback() {
 
 function RootRedirect() {
   const { session, loading } = useSession();
+  const [location, navigate] = useLocation();
 
-  if (loading) return null;
+  useEffect(() => {
+    if (loading) return;
+    if (location !== "/") return;
+    if (!session) {
+      navigate("/login", { replace: true });
+    } else {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [session, loading, location, navigate]);
 
-  return session ? <Dashboard /> : <Login />;
+  return null;
 }
 
 // ─── Protected pages ──────────────────────────────────────────────────────────
