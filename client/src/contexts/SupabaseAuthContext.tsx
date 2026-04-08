@@ -41,7 +41,10 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: name, name } },
+      options: {
+        data: { full_name: name, name },
+        emailRedirectTo: `${import.meta.env.VITE_APP_URL || window.location.origin}/auth/callback`,
+      },
     });
     if (error) throw error;
   };

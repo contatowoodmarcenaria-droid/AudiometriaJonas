@@ -66,10 +66,10 @@ export const appRouter = router({
         if (!valid) {
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Email ou senha incorretos' });
         }
-        const { sdk } = await import('./_core/sdk');
+        const { createSessionToken } = await import('./_core/session');
         const { ONE_YEAR_MS } = await import('@shared/const');
         const { getSessionCookieOptions } = await import('./_core/cookies');
-        const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || '', expiresInMs: ONE_YEAR_MS });
+        const sessionToken = await createSessionToken(user.openId, { name: user.name || '', expiresInMs: ONE_YEAR_MS });
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
         return { success: true, user: { id: user.id, name: user.name, email: user.email } };
@@ -90,10 +90,10 @@ export const appRouter = router({
         const passwordHash = await bcrypt.hash(input.password, 10);
         const user = await createUserWithPassword({ name: input.name, email: input.email, passwordHash });
         if (!user) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Erro ao criar conta' });
-        const { sdk } = await import('./_core/sdk');
+        const { createSessionToken } = await import('./_core/session');
         const { ONE_YEAR_MS } = await import('@shared/const');
         const { getSessionCookieOptions } = await import('./_core/cookies');
-        const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || '', expiresInMs: ONE_YEAR_MS });
+        const sessionToken = await createSessionToken(user.openId, { name: user.name || '', expiresInMs: ONE_YEAR_MS });
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
         return { success: true, user: { id: user.id, name: user.name, email: user.email } };

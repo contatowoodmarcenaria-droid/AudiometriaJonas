@@ -1,7 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import { sdk } from "./sdk";
 import { verifySupabaseToken } from "./supabaseAuth";
+import { verifySession } from "./session";
 import * as db from "../db";
 
 export type TrpcContext = {
@@ -19,10 +19,8 @@ async function authenticateWithSupabaseToken(token: string): Promise<User | null
     const supabaseUser = await verifySupabaseToken(token);
     if (!supabaseUser) return null;
 
-    // Use Supabase UUID as the openId in our system
     const openId = `supabase_${supabaseUser.id}`;
 
-    // Upsert user in our DB — include name from Supabase user_metadata if available
     await db.upsertUser({
       openId,
       email: supabaseUser.email ?? null,
@@ -39,22 +37,40 @@ async function authenticateWithSupabaseToken(token: string): Promise<User | null
   }
 }
 
+/**
+ * Authenticate via session cookie (email/password login).
+ */
+async function authenticateWithSessionCookie(cookieHeader: string | undefined): Promise<User | null> {
+  try {
+    const session = await verifySession(cookieHeader);
+    if (!session) return null;
+
+    const user = await db.getUserByOpenId(session.openId);
+    if (user) {
+      await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+    }
+    return user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
   try {
-    // 1. Try Supabase Bearer token first (Authorization: Bearer <token>)
+    // 1. Try Supabase Bearer token (Authorization: Bearer <token>)
     const authHeader = opts.req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7);
       user = await authenticateWithSupabaseToken(token);
     }
 
-    // 2. Fall back to existing session cookie (Manus OAuth or email/password)
+    // 2. Fall back to session cookie (email/password login)
     if (!user) {
-      user = await sdk.authenticateRequest(opts.req);
+      user = await authenticateWithSessionCookie(opts.req.headers.cookie);
     }
   } catch (error) {
     // Authentication is optional for public procedures.

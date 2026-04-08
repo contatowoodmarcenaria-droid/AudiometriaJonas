@@ -39,6 +39,79 @@ function useSupabaseSession() {
   return { session, loading: session === undefined };
 }
 
+/**
+ * Auth callback handler — processes Supabase email confirmation redirect.
+ * Supabase sends the user here with #access_token=...&type=signup in the URL hash.
+ * The Supabase client (detectSessionInUrl: true) automatically picks up the token
+ * from the hash and establishes the session. We just wait for it and redirect.
+ */
+function AuthCallback() {
+  const [, navigate] = useLocation();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Give Supabase client time to process the hash fragment
+    const handleCallback = async () => {
+      try {
+        // The Supabase client auto-detects tokens in the URL hash.
+        // We just need to wait for the session to be established.
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error("[AuthCallback] Error:", error.message);
+          setError(error.message);
+          return;
+        }
+
+        if (session) {
+          navigate("/dashboard", { replace: true });
+        } else {
+          // If no session yet, listen for the auth state change
+          const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            (event, session) => {
+              if (session) {
+                subscription.unsubscribe();
+                navigate("/dashboard", { replace: true });
+              }
+            }
+          );
+
+          // Timeout: if no session after 5s, redirect to login
+          setTimeout(() => {
+            subscription.unsubscribe();
+            navigate("/login", { replace: true });
+          }, 5000);
+        }
+      } catch (err) {
+        console.error("[AuthCallback] Unexpected error:", err);
+        setError("Erro ao processar confirmação. Tente fazer login.");
+      }
+    };
+
+    handleCallback();
+  }, [navigate]);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0B1E3C]">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">{error}</p>
+          <a href="/login" className="text-indigo-400 underline">Ir para o login</a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0B1E3C]">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+        <p className="text-sm text-indigo-200">Confirmando email...</p>
+      </div>
+    </div>
+  );
+}
+
 // Redireciona / para /login (não autenticado) ou /dashboard (autenticado)
 function RootRedirect() {
   const { session, loading } = useSupabaseSession();
@@ -94,6 +167,7 @@ function Router() {
       <Route path="/" component={RootRedirect} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/auth/callback" component={AuthCallback} />
 
       {/* Rotas protegidas */}
       <Route path="/dashboard">

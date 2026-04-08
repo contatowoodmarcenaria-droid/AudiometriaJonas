@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import {
@@ -25,7 +24,7 @@ export default function Home() {
   }, [isAuthenticated, loading, navigate]);
 
   const handleLogin = () => {
-    window.location.href = getLoginUrl();
+    navigate("/login");
   };
 
   if (loading) {
