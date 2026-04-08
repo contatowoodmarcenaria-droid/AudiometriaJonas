@@ -15,58 +15,9 @@ import Comparativo from "./pages/Comparativo";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
 import ExameAudiometrico from "./pages/ExameAudiometrico";
-import { supabase } from "@/lib/supabase";
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { Session } from "@supabase/supabase-js";
-
-// ─── Global Session Context ───────────────────────────────────────────────────
-// Single source of truth for auth state. Initialized once at app root.
-// All components read from this context instead of calling getSession() again.
-
-type SessionContextType = {
-  session: Session | null;
-  loading: boolean;
-};
-
-const SessionContext = createContext<SessionContextType>({
-  session: null,
-  loading: true,
-});
-
-export function useSession() {
-  return useContext(SessionContext);
-}
-
-function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // 1. Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    // 2. Listen for all auth changes (login, logout, token refresh, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        // Only flip loading on the very first event if still loading
-        setLoading(false);
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  return (
-    <SessionContext.Provider value={{ session, loading }}>
-      {children}
-    </SessionContext.Provider>
-  );
-}
+import { SessionProvider, useSession } from "@/lib/sessionContext";
 
 // ─── Auth Callback ────────────────────────────────────────────────────────────
 
@@ -83,11 +34,8 @@ function AuthCallback() {
       return;
     }
 
-    // If session not ready yet, wait for onAuthStateChange to fire
     const timeout = setTimeout(() => {
-      if (!session) {
-        setError("Erro ao confirmar email. Tente fazer login.");
-      }
+      setError("Erro ao confirmar email. Tente fazer login.");
     }, 5000);
 
     return () => clearTimeout(timeout);
@@ -114,34 +62,51 @@ function AuthCallback() {
   );
 }
 
-// ─── Route Guards ─────────────────────────────────────────────────────────────
+// ─── Root redirect ────────────────────────────────────────────────────────────
 
 function RootRedirect() {
   const { session, loading } = useSession();
-  const [, navigate] = useLocation();
 
-  useEffect(() => {
-    if (loading) return;
-    navigate(session ? "/dashboard" : "/login", { replace: true });
-  }, [session, loading, navigate]);
+  if (loading) return null;
 
+  return session ? <Dashboard /> : <Login />;
+}
+
+// ─── Protected pages ──────────────────────────────────────────────────────────
+// AppLayout stays mounted — only inner page content changes on navigation.
+
+function ProtectedPages() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0B1E3C]">
-      <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-    </div>
+    <Switch>
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/empresas" component={Empresas} />
+      <Route path="/colaboradores" component={Colaboradores} />
+      <Route path="/exames/novo" component={ExameAudiometrico} />
+      <Route path="/exames/:id" component={ExameAudiometrico} />
+      <Route path="/exames" component={Exames} />
+      <Route path="/comparativo" component={Comparativo} />
+      <Route path="/relatorios" component={Relatorios} />
+      <Route path="/configuracoes" component={Configuracoes} />
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useSession();
+// ─── Main Router ──────────────────────────────────────────────────────────────
+
+function RedirectToLogin() {
   const [, navigate] = useLocation();
-
   useEffect(() => {
-    if (!loading && !session) {
-      navigate("/login", { replace: true });
-    }
-  }, [session, loading, navigate]);
+    navigate("/login", { replace: true });
+  }, [navigate]);
+  return null;
+}
 
+function AppRouter() {
+  const { session, loading } = useSession();
+  const [location] = useLocation();
+
+  // Still loading session — show spinner, no redirect
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -153,53 +118,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!session) return null;
+  // Public routes — always accessible
+  if (location === "/") return <RootRedirect />;
+  if (location === "/login") return <Login />;
+  if (location === "/signup") return <Signup />;
+  if (location === "/auth/callback") return <AuthCallback />;
 
-  return <AppLayout>{children}</AppLayout>;
-}
+  // Protected routes — need session
+  if (!session) return <RedirectToLogin />;
 
-// ─── Router ───────────────────────────────────────────────────────────────────
-
-function Router() {
+  // Authenticated — persistent AppLayout with page content switching inside
   return (
-    <Switch>
-      {/* Rotas públicas */}
-      <Route path="/" component={RootRedirect} />
-      <Route path="/login" component={Login} />
-      <Route path="/signup" component={Signup} />
-      <Route path="/auth/callback" component={AuthCallback} />
-
-      {/* Rotas protegidas */}
-      <Route path="/dashboard">
-        <ProtectedRoute><Dashboard /></ProtectedRoute>
-      </Route>
-      <Route path="/empresas">
-        <ProtectedRoute><Empresas /></ProtectedRoute>
-      </Route>
-      <Route path="/colaboradores">
-        <ProtectedRoute><Colaboradores /></ProtectedRoute>
-      </Route>
-      <Route path="/exames/novo">
-        <ProtectedRoute><ExameAudiometrico /></ProtectedRoute>
-      </Route>
-      <Route path="/exames/:id">
-        <ProtectedRoute><ExameAudiometrico /></ProtectedRoute>
-      </Route>
-      <Route path="/exames">
-        <ProtectedRoute><Exames /></ProtectedRoute>
-      </Route>
-      <Route path="/comparativo">
-        <ProtectedRoute><Comparativo /></ProtectedRoute>
-      </Route>
-      <Route path="/relatorios">
-        <ProtectedRoute><Relatorios /></ProtectedRoute>
-      </Route>
-      <Route path="/configuracoes">
-        <ProtectedRoute><Configuracoes /></ProtectedRoute>
-      </Route>
-      <Route path="/404" component={NotFound} />
-      <Route component={NotFound} />
-    </Switch>
+    <AppLayout>
+      <ProtectedPages />
+    </AppLayout>
   );
 }
 
@@ -212,7 +144,7 @@ function App() {
         <SessionProvider>
           <TooltipProvider>
             <Toaster />
-            <Router />
+            <AppRouter />
           </TooltipProvider>
         </SessionProvider>
       </ThemeProvider>

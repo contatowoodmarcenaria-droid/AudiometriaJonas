@@ -1,6 +1,5 @@
 import { trpc } from "@/lib/trpc";
 import { supabase } from "@/lib/supabase";
-import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -8,37 +7,21 @@ import superjson from "superjson";
 import App from "./App";
 import "./index.css";
 
-const queryClient = new QueryClient();
-
-const redirectToLoginIfUnauthorized = (error: unknown) => {
-  if (!(error instanceof TRPCClientError)) return;
-  if (typeof window === "undefined") return;
-
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
-  if (!isUnauthorized) return;
-
-  const currentPath = window.location.pathname;
-  const publicPaths = ['/', '/login', '/signup', '/auth/callback'];
-  if (!publicPaths.includes(currentPath)) {
-    window.location.href = '/login';
-  }
-};
-
-queryClient.getQueryCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    const error = event.query.state.error;
-    redirectToLoginIfUnauthorized(error);
-    console.error("[API Query Error]", error);
-  }
-});
-
-queryClient.getMutationCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
-    console.error("[API Mutation Error]", error);
-  }
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Don't retry on auth errors — avoids cascade of UNAUTHORIZED retries
+      retry: (failureCount, error) => {
+        if (error instanceof TRPCClientError && error.data?.code === "UNAUTHORIZED") {
+          return false;
+        }
+        return failureCount < 2;
+      },
+      // Keep data fresh but don't refetch aggressively on window focus
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+    },
+  },
 });
 
 const trpcClient = trpc.createClient({
@@ -48,9 +31,13 @@ const trpcClient = trpc.createClient({
       transformer: superjson,
       async headers() {
         // Attach Supabase access token as Bearer token for backend auth
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          return { Authorization: `Bearer ${session.access_token}` };
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            return { Authorization: `Bearer ${session.access_token}` };
+          }
+        } catch (e) {
+          console.warn("[tRPC] Failed to get session for headers:", e);
         }
         return {};
       },

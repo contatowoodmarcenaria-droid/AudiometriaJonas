@@ -4,7 +4,7 @@ import { Eye, EyeOff, Loader2, Headphones } from "lucide-react";
 import { toast } from "sonner";
 import { AudioWaves } from "@/components/AudioWaves";
 import { supabase } from "@/lib/supabase";
-import { useSession } from "@/App";
+import { useSession } from "@/lib/sessionContext";
 
 function useRipple() {
   const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
