@@ -1,6 +1,23 @@
 {
   "include": ["client/src/**/*", "shared/**/*", "server/**/*"],
-  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
+  "exclude": [
+    "node_modules",
+    "build",
+    "dist",
+    "**/*.test.ts",
+    "server/_core/dataApi.ts",
+    "server/_core/imageGeneration.ts",
+    "server/_core/llm.ts",
+    "server/_core/map.ts",
+    "server/_core/notification.ts",
+    "server/_core/oauth.ts",
+    "server/_core/sdk.ts",
+    "server/_core/voiceTranscription.ts",
+    "server/storage.ts",
+    "client/src/components/AIChatBox.tsx",
+    "client/src/components/Map.tsx",
+    "client/src/pages/ComponentShowcase.tsx"
+  ],
   "compilerOptions": {
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",

@@ -1,5 +1,6 @@
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import {
   alertas,
   colaboradores,
@@ -12,14 +13,15 @@ import {
   type InsertExame,
   type InsertUser,
 } from "../drizzle/schema";
-import { ENV } from "./_core/env";
 
+let _pool: Pool | null = null;
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -53,13 +55,13 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (user.role !== undefined) {
       values.role = user.role;
       updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
     }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
+      set: updateSet,
+    });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -131,8 +133,8 @@ export async function getEmpresaById(id: number, userId: number) {
 export async function createEmpresa(data: InsertEmpresa) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(empresas).values(data);
-  return result;
+  const result = await db.insert(empresas).values(data).returning({ id: empresas.id });
+  return result[0];
 }
 
 export async function updateEmpresa(id: number, userId: number, data: Partial<InsertEmpresa>) {
@@ -170,7 +172,6 @@ export async function getColaboradores(userId: number, filters?: { nome?: string
   if (filters?.empresaId) conditions.push(eq(colaboradores.empresaId, filters.empresaId));
   if (filters?.status) conditions.push(eq(colaboradores.status, filters.status as any));
   if (filters?.cargo) conditions.push(like(colaboradores.cargo, `%${filters.cargo}%`));
-  // Busca combinada: nome OU código
   if (filters?.busca) {
     conditions.push(
       or(
@@ -185,7 +186,6 @@ export async function getColaboradores(userId: number, filters?: { nome?: string
 export async function getNextCodigoColaborador(userId: number): Promise<string> {
   const db = await getDb();
   if (!db) return "COL-0001";
-  // Busca o maior código existente para este usuário
   const result = await db
     .select({ codigo: colaboradores.codigo })
     .from(colaboradores)
@@ -210,7 +210,7 @@ export async function getColaboradorById(id: number, userId: number) {
 export async function createColaborador(data: InsertColaborador) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(colaboradores).values(data);
+  return db.insert(colaboradores).values(data).returning({ id: colaboradores.id });
 }
 
 export async function updateColaborador(id: number, userId: number, data: Partial<InsertColaborador>) {
@@ -261,7 +261,7 @@ export async function getExameById(id: number, userId: number) {
 export async function createExame(data: InsertExame) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(exames).values(data);
+  return db.insert(exames).values(data).returning({ id: exames.id });
 }
 
 export async function updateExame(id: number, userId: number, data: Partial<InsertExame>) {
@@ -382,21 +382,15 @@ export async function getEmpresasComColaboradoresEExames(userId: number) {
 
 // ---- Relatórios ----
 
-/**
- * Retorna contagem de exames agrupados por mês para os últimos N meses.
- * Inclui total de realizados e com alteração por mês.
- */
 export async function getExamesPorMes(userId: number, meses = 6) {
   const db = await getDb();
   if (!db) return [];
 
-  // Calcular data de início (N meses atrás)
   const dataInicio = new Date();
   dataInicio.setMonth(dataInicio.getMonth() - meses + 1);
   dataInicio.setDate(1);
-  const dataInicioStr = dataInicio.toISOString().slice(0, 10); // YYYY-MM-DD
+  const dataInicioStr = dataInicio.toISOString().slice(0, 10);
 
-  // Buscar todos os exames do período
   const rows = await db
     .select({
       dataRealizacao: exames.dataRealizacao,
@@ -407,11 +401,9 @@ export async function getExamesPorMes(userId: number, meses = 6) {
     .where(and(eq(exames.userId, userId), sql`${exames.dataRealizacao} >= ${dataInicioStr}`))
     .orderBy(exames.dataRealizacao);
 
-  // Agrupar por mês no lado do servidor
   const mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const agrupado: Record<string, { mes: string; realizados: number; alteracoes: number }> = {};
 
-  // Inicializar todos os meses no período
   for (let i = 0; i < meses; i++) {
     const d = new Date();
     d.setMonth(d.getMonth() - (meses - 1) + i);
@@ -419,10 +411,9 @@ export async function getExamesPorMes(userId: number, meses = 6) {
     agrupado[chave] = { mes: mesesNomes[d.getMonth()], realizados: 0, alteracoes: 0 };
   }
 
-  // Contar exames por mês
   for (const row of rows) {
     if (!row.dataRealizacao) continue;
-    const chave = row.dataRealizacao.slice(0, 7); // YYYY-MM
+    const chave = row.dataRealizacao.slice(0, 7);
     if (agrupado[chave]) {
       agrupado[chave].realizados++;
       if (row.resultado === "alteracao" || row.resultado === "perda_leve" || row.resultado === "perda_moderada" || row.resultado === "perda_severa") {
@@ -434,9 +425,6 @@ export async function getExamesPorMes(userId: number, meses = 6) {
   return Object.values(agrupado);
 }
 
-/**
- * Retorna distribuição percentual dos resultados dos exames.
- */
 export async function getDistribuicaoResultados(userId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -473,9 +461,6 @@ export async function getDistribuicaoResultados(userId: number) {
   });
 }
 
-/**
- * Retorna empresas com contagem de colaboradores, exames e alterações para o relatório.
- */
 export async function getEmpresasParaRelatorio(userId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -500,80 +485,39 @@ export async function getEmpresasParaRelatorio(userId: number) {
       if (examesPendentes > 0) status = "Com Pendências";
       else if (totalAlteracoes > 0) status = "Atenção";
 
-      return {
-        id: emp.id,
-        nome: emp.nome,
-        totalColaboradores,
-        totalExames,
-        totalAlteracoes,
-        examesPendentes,
-        status,
-      };
+      return { id: emp.id, nome: emp.nome, totalColaboradores, totalExames, totalAlteracoes, examesPendentes, status };
     })
   );
 
   return result;
 }
 
-/**
- * Calcula a variação percentual entre o mês atual e o mês anterior
- * para empresas, colaboradores e exames.
- * Retorna null em cada campo quando não há dados históricos suficientes.
- */
 export async function getComparativoMensal(userId: number) {
   const db = await getDb();
   if (!db) return null;
 
   const now = new Date();
-
-  // Início do mês atual
   const inicioMesAtual = new Date(now.getFullYear(), now.getMonth(), 1);
   const inicioMesAtualStr = inicioMesAtual.toISOString().slice(0, 10);
-
-  // Início do mês anterior
   const inicioMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const inicioMesAnteriorStr = inicioMesAnterior.toISOString().slice(0, 10);
-
-  // Fim do mês anterior (= início do mês atual - 1 dia)
   const fimMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0);
   const fimMesAnteriorStr = fimMesAnterior.toISOString().slice(0, 10);
 
   const [
-    empresasMesAtual,
-    empresasMesAnterior,
-    colaboradoresMesAtual,
-    colaboradoresMesAnterior,
-    examesMesAtual,
-    examesMesAnterior,
+    empresasMesAtual, empresasMesAnterior,
+    colaboradoresMesAtual, colaboradoresMesAnterior,
+    examesMesAtual, examesMesAnterior,
   ] = await Promise.all([
-    // Empresas criadas no mês atual
-    db.select({ count: sql<number>`count(*)` }).from(empresas).where(
-      and(eq(empresas.userId, userId), sql`DATE(${empresas.createdAt}) >= ${inicioMesAtualStr}`)
-    ),
-    // Empresas criadas no mês anterior
-    db.select({ count: sql<number>`count(*)` }).from(empresas).where(
-      and(eq(empresas.userId, userId), sql`DATE(${empresas.createdAt}) >= ${inicioMesAnteriorStr}`, sql`DATE(${empresas.createdAt}) <= ${fimMesAnteriorStr}`)
-    ),
-    // Colaboradores criados no mês atual
-    db.select({ count: sql<number>`count(*)` }).from(colaboradores).where(
-      and(eq(colaboradores.userId, userId), sql`DATE(${colaboradores.createdAt}) >= ${inicioMesAtualStr}`)
-    ),
-    // Colaboradores criados no mês anterior
-    db.select({ count: sql<number>`count(*)` }).from(colaboradores).where(
-      and(eq(colaboradores.userId, userId), sql`DATE(${colaboradores.createdAt}) >= ${inicioMesAnteriorStr}`, sql`DATE(${colaboradores.createdAt}) <= ${fimMesAnteriorStr}`)
-    ),
-    // Exames realizados no mês atual
-    db.select({ count: sql<number>`count(*)` }).from(exames).where(
-      and(eq(exames.userId, userId), sql`${exames.dataRealizacao} >= ${inicioMesAtualStr}`)
-    ),
-    // Exames realizados no mês anterior
-    db.select({ count: sql<number>`count(*)` }).from(exames).where(
-      and(eq(exames.userId, userId), sql`${exames.dataRealizacao} >= ${inicioMesAnteriorStr}`, sql`${exames.dataRealizacao} <= ${fimMesAnteriorStr}`)
-    ),
+    db.select({ count: sql<number>`count(*)` }).from(empresas).where(and(eq(empresas.userId, userId), sql`DATE(${empresas.createdAt}) >= ${inicioMesAtualStr}`)),
+    db.select({ count: sql<number>`count(*)` }).from(empresas).where(and(eq(empresas.userId, userId), sql`DATE(${empresas.createdAt}) >= ${inicioMesAnteriorStr}`, sql`DATE(${empresas.createdAt}) <= ${fimMesAnteriorStr}`)),
+    db.select({ count: sql<number>`count(*)` }).from(colaboradores).where(and(eq(colaboradores.userId, userId), sql`DATE(${colaboradores.createdAt}) >= ${inicioMesAtualStr}`)),
+    db.select({ count: sql<number>`count(*)` }).from(colaboradores).where(and(eq(colaboradores.userId, userId), sql`DATE(${colaboradores.createdAt}) >= ${inicioMesAnteriorStr}`, sql`DATE(${colaboradores.createdAt}) <= ${fimMesAnteriorStr}`)),
+    db.select({ count: sql<number>`count(*)` }).from(exames).where(and(eq(exames.userId, userId), sql`${exames.dataRealizacao} >= ${inicioMesAtualStr}`)),
+    db.select({ count: sql<number>`count(*)` }).from(exames).where(and(eq(exames.userId, userId), sql`${exames.dataRealizacao} >= ${inicioMesAnteriorStr}`, sql`${exames.dataRealizacao} <= ${fimMesAnteriorStr}`)),
   ]);
 
-  const calcVariacao = (atual: number, anterior: number): { valor: number; positivo: boolean } | null => {
-    // Só exibe tendência se houver dados no mês anterior
+  const calcVariacao = (atual: number, anterior: number) => {
     if (anterior === 0) return null;
     const variacao = Math.round(((atual - anterior) / anterior) * 100);
     return { valor: variacao, positivo: variacao >= 0 };

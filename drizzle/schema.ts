@@ -1,23 +1,68 @@
 import {
-  int,
-  mysqlEnum,
-  mysqlTable,
+  serial,
+  integer,
+  pgEnum,
+  pgTable,
   text,
   timestamp,
   varchar,
-  decimal,
+  numeric,
   boolean,
-  json,
-  float,
-} from "drizzle-orm/mysql-core";
+  jsonb,
+  real,
+} from "drizzle-orm/pg-core";
 
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+
+export const empresaStatusEnum = pgEnum("empresa_status", ["ativa", "inativa", "pendente", "atencao"]);
+
+export const colaboradorStatusEnum = pgEnum("colaborador_status", ["ativo", "inativo", "afastado"]);
+
+export const sexoEnum = pgEnum("sexo", ["M", "F", "outro"]);
+
+export const motivoAvaliacaoEnum = pgEnum("motivo_avaliacao", [
+  "admissional",
+  "periodico",
+  "retorno_trabalho",
+  "demissional",
+  "mudanca_riscos",
+  "monitoracao_pontual",
+  "consulta_medica",
+]);
+
+export const repousoAuditivoEnum = pgEnum("repouso_auditivo", ["maior_igual_14h", "menor_14h", "nao_informado"]);
+
+export const epiUsoEnum = pgEnum("epi_uso", ["nao", "sim", "plug", "concha"]);
+
+export const meatoscopiaEnum = pgEnum("meatoscopia", ["normal", "obstrucao_parcial", "obstrucao_total"]);
+
+export const tipoMediaEnum = pgEnum("tipo_media", ["tritonal", "quadritonal"]);
+
+export const resultadoAudiometricoEnum = pgEnum("resultado_audiometrico", [
+  "normal", "alteracao_leve", "alteracao_moderada", "alteracao_severa", "alteracao_profunda",
+]);
+
+export const statusExameAudiometricoEnum = pgEnum("status_exame_audiometrico", ["rascunho", "finalizado", "laudo_emitido"]);
+
+export const tipoExameEnum = pgEnum("tipo_exame", ["audiometria_ocupacional", "avaliacao_audiologica", "meatoscopia", "imitanciometria"]);
+
+export const resultadoExameEnum = pgEnum("resultado_exame", ["normal", "alteracao", "perda_leve", "perda_moderada", "perda_severa"]);
+
+export const statusExameEnum = pgEnum("status_exame", ["realizado", "pendente", "vencido", "agendado"]);
+
+export const tipoAlertaEnum = pgEnum("tipo_alerta", ["exame_vencido", "exame_vencer", "pendencia", "novo_colaborador"]);
+
+// ─── Tables ───────────────────────────────────────────────────────────────────
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: roleEnum("role").default("user").notNull(),
   // Fonoaudiólogo profile fields
   specialty: varchar("specialty", { length: 128 }),
   crfa: varchar("crfa", { length: 32 }),
@@ -27,14 +72,14 @@ export const users = mysqlTable("users", {
   tituloLaudo: varchar("tituloLaudo", { length: 256 }),
   assinaturaUrl: text("assinaturaUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
   // Email/password auth
   passwordHash: varchar("passwordHash", { length: 256 }),
 });
 
-export const empresas = mysqlTable("empresas", {
-  id: int("id").autoincrement().primaryKey(),
+export const empresas = pgTable("empresas", {
+  id: serial("id").primaryKey(),
   nome: varchar("nome", { length: 256 }).notNull(),
   cnpj: varchar("cnpj", { length: 18 }).notNull().unique(),
   responsavel: varchar("responsavel", { length: 128 }),
@@ -42,42 +87,42 @@ export const empresas = mysqlTable("empresas", {
   email: varchar("email", { length: 320 }),
   endereco: text("endereco"),
   setor: varchar("setor", { length: 128 }),
-  status: mysqlEnum("status", ["ativa", "inativa", "pendente", "atencao"]).default("ativa").notNull(),
+  status: empresaStatusEnum("status").default("ativa").notNull(),
   // Dados para cabeçalho do laudo
   logotipoUrl: text("logotipoUrl"),
   cep: varchar("cep", { length: 10 }),
   cidade: varchar("cidade", { length: 128 }),
   estado: varchar("estado", { length: 2 }),
-  userId: int("userId").notNull(),
+  userId: integer("userId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const colaboradores = mysqlTable("colaboradores", {
-  id: int("id").autoincrement().primaryKey(),
+export const colaboradores = pgTable("colaboradores", {
+  id: serial("id").primaryKey(),
   codigo: varchar("codigo", { length: 16 }),
   nome: varchar("nome", { length: 256 }).notNull(),
   cpf: varchar("cpf", { length: 14 }),
   cargo: varchar("cargo", { length: 128 }),
   setor: varchar("setor", { length: 128 }),
-  empresaId: int("empresaId").notNull(),
-  status: mysqlEnum("status", ["ativo", "inativo", "afastado"]).default("ativo").notNull(),
+  empresaId: integer("empresaId").notNull(),
+  status: colaboradorStatusEnum("status").default("ativo").notNull(),
   dataNascimento: varchar("dataNascimento", { length: 10 }),
-  sexo: mysqlEnum("sexo", ["M", "F", "outro"]),
+  sexo: sexoEnum("sexo"),
   dataAdmissao: varchar("dataAdmissao", { length: 10 }),
   email: varchar("email", { length: 320 }),
   telefone: varchar("telefone", { length: 20 }),
-  userId: int("userId").notNull(),
+  userId: integer("userId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // Tabela principal de exames audiométricos ocupacionais
-export const examesAudiometricos = mysqlTable("exames_audiometricos", {
-  id: int("id").autoincrement().primaryKey(),
-  colaboradorId: int("colaboradorId").notNull(),
-  empresaId: int("empresaId").notNull(),
-  userId: int("userId").notNull(),
+export const examesAudiometricos = pgTable("exames_audiometricos", {
+  id: serial("id").primaryKey(),
+  colaboradorId: integer("colaboradorId").notNull(),
+  empresaId: integer("empresaId").notNull(),
+  userId: integer("userId").notNull(),
 
   // 1. Identificação
   audiometro: varchar("audiometro", { length: 128 }),
@@ -85,18 +130,10 @@ export const examesAudiometricos = mysqlTable("exames_audiometricos", {
   dataRealizacao: varchar("dataRealizacao", { length: 10 }).notNull(),
 
   // 2. Motivo da Avaliação
-  motivoAvaliacao: mysqlEnum("motivoAvaliacao", [
-    "admissional",
-    "periodico",
-    "retorno_trabalho",
-    "demissional",
-    "mudanca_riscos",
-    "monitoracao_pontual",
-    "consulta_medica",
-  ]).default("admissional").notNull(),
+  motivoAvaliacao: motivoAvaliacaoEnum("motivoAvaliacao").default("admissional").notNull(),
 
   // Repouso auditivo
-  repousoAuditivo: mysqlEnum("repousoAuditivo", ["maior_igual_14h", "menor_14h", "nao_informado"]).default("nao_informado"),
+  repousoAuditivo: repousoAuditivoEnum("repousoAuditivo").default("nao_informado"),
   repousoHoras: varchar("repousoHoras", { length: 10 }),
 
   // Queixa
@@ -104,34 +141,33 @@ export const examesAudiometricos = mysqlTable("exames_audiometricos", {
   queixaDescricao: text("queixaDescricao"),
 
   // EPI
-  epiUso: mysqlEnum("epiUso", ["nao", "sim", "plug", "concha"]).default("nao"),
+  epiUso: epiUsoEnum("epiUso").default("nao"),
 
   // 3. Meatoscopia
-  meatoscopiaOD: mysqlEnum("meatoscopiaOD", ["normal", "obstrucao_parcial", "obstrucao_total"]).default("normal"),
-  meatoscopiaOE: mysqlEnum("meatoscopiaOE", ["normal", "obstrucao_parcial", "obstrucao_total"]).default("normal"),
+  meatoscopiaOD: meatoscopiaEnum("meatoscopiaOD").default("normal"),
+  meatoscopiaOE: meatoscopiaEnum("meatoscopiaOE").default("normal"),
 
   // 4. Audiometria Tonal - Via Aérea Orelha Direita (dBNA)
-  // Frequências: 250, 500, 1000, 2000, 3000, 4000, 6000, 8000 Hz
-  vaOD250: int("vaOD250"),
-  vaOD500: int("vaOD500"),
-  vaOD1000: int("vaOD1000"),
-  vaOD2000: int("vaOD2000"),
-  vaOD3000: int("vaOD3000"),
-  vaOD4000: int("vaOD4000"),
-  vaOD6000: int("vaOD6000"),
-  vaOD8000: int("vaOD8000"),
+  vaOD250: integer("vaOD250"),
+  vaOD500: integer("vaOD500"),
+  vaOD1000: integer("vaOD1000"),
+  vaOD2000: integer("vaOD2000"),
+  vaOD3000: integer("vaOD3000"),
+  vaOD4000: integer("vaOD4000"),
+  vaOD6000: integer("vaOD6000"),
+  vaOD8000: integer("vaOD8000"),
 
   // Via Aérea OD - Mascaramento
-  vaMascOD250: int("vaMascOD250"),
-  vaMascOD500: int("vaMascOD500"),
-  vaMascOD1000: int("vaMascOD1000"),
-  vaMascOD2000: int("vaMascOD2000"),
-  vaMascOD3000: int("vaMascOD3000"),
-  vaMascOD4000: int("vaMascOD4000"),
-  vaMascOD6000: int("vaMascOD6000"),
-  vaMascOD8000: int("vaMascOD8000"),
+  vaMascOD250: integer("vaMascOD250"),
+  vaMascOD500: integer("vaMascOD500"),
+  vaMascOD1000: integer("vaMascOD1000"),
+  vaMascOD2000: integer("vaMascOD2000"),
+  vaMascOD3000: integer("vaMascOD3000"),
+  vaMascOD4000: integer("vaMascOD4000"),
+  vaMascOD6000: integer("vaMascOD6000"),
+  vaMascOD8000: integer("vaMascOD8000"),
 
-  // Via Aérea OD - Tipo de resposta (ausência não mascarada, ausência mascarada, etc.)
+  // Via Aérea OD - Tipo de resposta
   vaTipoOD250: varchar("vaTipoOD250", { length: 20 }),
   vaTipoOD500: varchar("vaTipoOD500", { length: 20 }),
   vaTipoOD1000: varchar("vaTipoOD1000", { length: 20 }),
@@ -142,24 +178,24 @@ export const examesAudiometricos = mysqlTable("exames_audiometricos", {
   vaTipoOD8000: varchar("vaTipoOD8000", { length: 20 }),
 
   // Via Aérea Orelha Esquerda (dBNA)
-  vaOE250: int("vaOE250"),
-  vaOE500: int("vaOE500"),
-  vaOE1000: int("vaOE1000"),
-  vaOE2000: int("vaOE2000"),
-  vaOE3000: int("vaOE3000"),
-  vaOE4000: int("vaOE4000"),
-  vaOE6000: int("vaOE6000"),
-  vaOE8000: int("vaOE8000"),
+  vaOE250: integer("vaOE250"),
+  vaOE500: integer("vaOE500"),
+  vaOE1000: integer("vaOE1000"),
+  vaOE2000: integer("vaOE2000"),
+  vaOE3000: integer("vaOE3000"),
+  vaOE4000: integer("vaOE4000"),
+  vaOE6000: integer("vaOE6000"),
+  vaOE8000: integer("vaOE8000"),
 
   // Via Aérea OE - Mascaramento
-  vaMascOE250: int("vaMascOE250"),
-  vaMascOE500: int("vaMascOE500"),
-  vaMascOE1000: int("vaMascOE1000"),
-  vaMascOE2000: int("vaMascOE2000"),
-  vaMascOE3000: int("vaMascOE3000"),
-  vaMascOE4000: int("vaMascOE4000"),
-  vaMascOE6000: int("vaMascOE6000"),
-  vaMascOE8000: int("vaMascOE8000"),
+  vaMascOE250: integer("vaMascOE250"),
+  vaMascOE500: integer("vaMascOE500"),
+  vaMascOE1000: integer("vaMascOE1000"),
+  vaMascOE2000: integer("vaMascOE2000"),
+  vaMascOE3000: integer("vaMascOE3000"),
+  vaMascOE4000: integer("vaMascOE4000"),
+  vaMascOE6000: integer("vaMascOE6000"),
+  vaMascOE8000: integer("vaMascOE8000"),
 
   // Via Aérea OE - Tipo de resposta
   vaTipoOE250: varchar("vaTipoOE250", { length: 20 }),
@@ -172,18 +208,18 @@ export const examesAudiometricos = mysqlTable("exames_audiometricos", {
   vaTipoOE8000: varchar("vaTipoOE8000", { length: 20 }),
 
   // Via Óssea Orelha Direita (dBNA) - Frequências: 500, 1000, 2000, 3000, 4000 Hz
-  voOD500: int("voOD500"),
-  voOD1000: int("voOD1000"),
-  voOD2000: int("voOD2000"),
-  voOD3000: int("voOD3000"),
-  voOD4000: int("voOD4000"),
+  voOD500: integer("voOD500"),
+  voOD1000: integer("voOD1000"),
+  voOD2000: integer("voOD2000"),
+  voOD3000: integer("voOD3000"),
+  voOD4000: integer("voOD4000"),
 
   // Via Óssea OD - Mascaramento
-  voMascOD500: int("voMascOD500"),
-  voMascOD1000: int("voMascOD1000"),
-  voMascOD2000: int("voMascOD2000"),
-  voMascOD3000: int("voMascOD3000"),
-  voMascOD4000: int("voMascOD4000"),
+  voMascOD500: integer("voMascOD500"),
+  voMascOD1000: integer("voMascOD1000"),
+  voMascOD2000: integer("voMascOD2000"),
+  voMascOD3000: integer("voMascOD3000"),
+  voMascOD4000: integer("voMascOD4000"),
 
   // Via Óssea OD - Tipo de resposta
   voTipoOD500: varchar("voTipoOD500", { length: 20 }),
@@ -193,18 +229,18 @@ export const examesAudiometricos = mysqlTable("exames_audiometricos", {
   voTipoOD4000: varchar("voTipoOD4000", { length: 20 }),
 
   // Via Óssea Orelha Esquerda (dBNA)
-  voOE500: int("voOE500"),
-  voOE1000: int("voOE1000"),
-  voOE2000: int("voOE2000"),
-  voOE3000: int("voOE3000"),
-  voOE4000: int("voOE4000"),
+  voOE500: integer("voOE500"),
+  voOE1000: integer("voOE1000"),
+  voOE2000: integer("voOE2000"),
+  voOE3000: integer("voOE3000"),
+  voOE4000: integer("voOE4000"),
 
   // Via Óssea OE - Mascaramento
-  voMascOE500: int("voMascOE500"),
-  voMascOE1000: int("voMascOE1000"),
-  voMascOE2000: int("voMascOE2000"),
-  voMascOE3000: int("voMascOE3000"),
-  voMascOE4000: int("voMascOE4000"),
+  voMascOE500: integer("voMascOE500"),
+  voMascOE1000: integer("voMascOE1000"),
+  voMascOE2000: integer("voMascOE2000"),
+  voMascOE3000: integer("voMascOE3000"),
+  voMascOE4000: integer("voMascOE4000"),
 
   // Via Óssea OE - Tipo de resposta
   voTipoOE500: varchar("voTipoOE500", { length: 20 }),
@@ -214,72 +250,72 @@ export const examesAudiometricos = mysqlTable("exames_audiometricos", {
   voTipoOE4000: varchar("voTipoOE4000", { length: 20 }),
 
   // Médias calculadas (armazenadas para histórico)
-  mediaOD: decimal("mediaOD", { precision: 5, scale: 2 }),
-  mediaOE: decimal("mediaOE", { precision: 5, scale: 2 }),
+  mediaOD: numeric("mediaOD", { precision: 5, scale: 2 }),
+  mediaOE: numeric("mediaOE", { precision: 5, scale: 2 }),
   metodoMedia: varchar("metodoMedia", { length: 64 }),
-  tipoMedia: mysqlEnum("tipoMedia", ["tritonal", "quadritonal"]),
+  tipoMedia: tipoMediaEnum("tipoMedia"),
 
   // Classificação da perda auditiva
   classificacaoOD: varchar("classificacaoOD", { length: 128 }),
   classificacaoOE: varchar("classificacaoOE", { length: 128 }),
 
   // LRF, LDV, MASC
-  lrfOD: int("lrfOD"),
-  ldvOD: int("ldvOD"),
-  mascOD: int("mascOD"),
-  lrfOE: int("lrfOE"),
-  ldvOE: int("ldvOE"),
-  mascOE: int("mascOE"),
+  lrfOD: integer("lrfOD"),
+  ldvOD: integer("ldvOD"),
+  mascOD: integer("mascOD"),
+  lrfOE: integer("lrfOE"),
+  ldvOE: integer("ldvOE"),
+  mascOE: integer("mascOE"),
 
   // 5. Índice de Reconhecimento de Fala (IRF)
-  irfIntensidadeOD: int("irfIntensidadeOD"),
-  irfMonossilabosOD: int("irfMonossilabosOD"),
-  irfDissilabosOD: int("irfDissilabosOD"),
-  irfMascOD: int("irfMascOD"),
-  irfIntensidadeOE: int("irfIntensidadeOE"),
-  irfMonossilabosOE: int("irfMonossilabosOE"),
-  irfDissilabosOE: int("irfDissilabosOE"),
-  irfMascOE: int("irfMascOE"),
+  irfIntensidadeOD: integer("irfIntensidadeOD"),
+  irfMonossilabosOD: integer("irfMonossilabosOD"),
+  irfDissilabosOD: integer("irfDissilabosOD"),
+  irfMascOD: integer("irfMascOD"),
+  irfIntensidadeOE: integer("irfIntensidadeOE"),
+  irfMonossilabosOE: integer("irfMonossilabosOE"),
+  irfDissilabosOE: integer("irfDissilabosOE"),
+  irfMascOE: integer("irfMascOE"),
 
   // Mascaramento em dB (Min/Max) para VA e VO
-  mascVAMinOD: int("mascVAMinOD"),
-  mascVAMaxOD: int("mascVAMaxOD"),
-  mascVOMinOD: int("mascVOMinOD"),
-  mascVOMaxOD: int("mascVOMaxOD"),
-  mascVAMinOE: int("mascVAMinOE"),
-  mascVAMaxOE: int("mascVAMaxOE"),
-  mascVOMinOE: int("mascVOMinOE"),
-  mascVOMaxOE: int("mascVOMaxOE"),
+  mascVAMinOD: integer("mascVAMinOD"),
+  mascVAMaxOD: integer("mascVAMaxOD"),
+  mascVOMinOD: integer("mascVOMinOD"),
+  mascVOMaxOD: integer("mascVOMaxOD"),
+  mascVAMinOE: integer("mascVAMinOE"),
+  mascVAMaxOE: integer("mascVAMaxOE"),
+  mascVOMinOE: integer("mascVOMinOE"),
+  mascVOMaxOE: integer("mascVOMaxOE"),
 
   // 6. Parecer Audiológico
   parecerAudiologico: text("parecerAudiologico"),
 
   // Status geral do exame
-  resultado: mysqlEnum("resultado", ["normal", "alteracao_leve", "alteracao_moderada", "alteracao_severa", "alteracao_profunda"]).default("normal"),
-  status: mysqlEnum("status", ["rascunho", "finalizado", "laudo_emitido"]).default("rascunho").notNull(),
+  resultado: resultadoAudiometricoEnum("resultado").default("normal"),
+  status: statusExameAudiometricoEnum("status").default("rascunho").notNull(),
 
   // URL do laudo PDF gerado
   laudoUrl: text("laudoUrl"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // Tabela de modelos de parecer audiológico (personalizáveis pelo profissional)
-export const pareceresModelo = mysqlTable("pareceres_modelo", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const pareceresModelo = pgTable("pareceres_modelo", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
   titulo: varchar("titulo", { length: 256 }).notNull(),
   texto: text("texto").notNull(),
   categoria: varchar("categoria", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // Tabela de configurações do profissional para laudos
-export const configuracoesLaudo = mysqlTable("configuracoes_laudo", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
+export const configuracoesLaudo = pgTable("configuracoes_laudo", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
   // Cabeçalho do laudo
   nomeClinica: varchar("nomeClinica", { length: 256 }),
   enderecoClinica: text("enderecoClinica"),
@@ -293,38 +329,38 @@ export const configuracoesLaudo = mysqlTable("configuracoes_laudo", {
   crfa: varchar("crfa", { length: 32 }),
   assinaturaUrl: text("assinaturaUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 // Manter tabela legada de exames para compatibilidade
-export const exames = mysqlTable("exames", {
-  id: int("id").autoincrement().primaryKey(),
-  colaboradorId: int("colaboradorId").notNull(),
-  empresaId: int("empresaId").notNull(),
-  tipo: mysqlEnum("tipo", ["audiometria_ocupacional", "avaliacao_audiologica", "meatoscopia", "imitanciometria"]).default("audiometria_ocupacional").notNull(),
+export const exames = pgTable("exames", {
+  id: serial("id").primaryKey(),
+  colaboradorId: integer("colaboradorId").notNull(),
+  empresaId: integer("empresaId").notNull(),
+  tipo: tipoExameEnum("tipo").default("audiometria_ocupacional").notNull(),
   dataRealizacao: varchar("dataRealizacao", { length: 10 }).notNull(),
   dataVencimento: varchar("dataVencimento", { length: 10 }),
-  resultado: mysqlEnum("resultado", ["normal", "alteracao", "perda_leve", "perda_moderada", "perda_severa"]).default("normal"),
-  status: mysqlEnum("status", ["realizado", "pendente", "vencido", "agendado"]).default("realizado").notNull(),
+  resultado: resultadoExameEnum("resultado").default("normal"),
+  status: statusExameEnum("status").default("realizado").notNull(),
   observacoes: text("observacoes"),
-  dadosAudiometria: json("dadosAudiometria"),
+  dadosAudiometria: jsonb("dadosAudiometria"),
   laudoUrl: text("laudoUrl"),
-  exameAudiometricoId: int("exameAudiometricoId"),
-  userId: int("userId").notNull(),
+  exameAudiometricoId: integer("exameAudiometricoId"),
+  userId: integer("userId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const alertas = mysqlTable("alertas", {
-  id: int("id").autoincrement().primaryKey(),
-  tipo: mysqlEnum("tipo", ["exame_vencido", "exame_vencer", "pendencia", "novo_colaborador"]).notNull(),
+export const alertas = pgTable("alertas", {
+  id: serial("id").primaryKey(),
+  tipo: tipoAlertaEnum("tipo").notNull(),
   titulo: varchar("titulo", { length: 256 }).notNull(),
   descricao: text("descricao"),
-  empresaId: int("empresaId"),
-  colaboradorId: int("colaboradorId"),
-  exameId: int("exameId"),
+  empresaId: integer("empresaId"),
+  colaboradorId: integer("colaboradorId"),
+  exameId: integer("exameId"),
   lido: boolean("lido").default(false).notNull(),
-  userId: int("userId").notNull(),
+  userId: integer("userId").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
