@@ -13,7 +13,9 @@ export function useAuth(options?: UseAuthOptions) {
   const utils = trpc.useUtils();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
-    retry: false,
+    // Use the global retry policy (defined in QueryClient) which retries up to
+    // 2 times on transient failures but never on UNAUTHORIZED. This matters for
+    // new users whose first request may fail transiently (e.g. DB cold start).
     refetchOnWindowFocus: false,
   });
 

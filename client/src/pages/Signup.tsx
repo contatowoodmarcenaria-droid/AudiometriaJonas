@@ -93,7 +93,10 @@ export default function Signup() {
 
       if (data.session) {
         toast.success("Conta criada com sucesso!");
-        navigate("/dashboard");
+        // Navigation is handled by the useEffect below once the session
+        // is reflected in SessionProvider (via onAuthStateChange).
+        // Calling navigate() here races with the session update and causes
+        // multiple rapid navigations → DOM reconciliation errors (ErrorBoundary).
       } else if (data.user) {
         toast.success("Conta criada! Verifique seu email para confirmar o cadastro.");
         navigate("/login");
