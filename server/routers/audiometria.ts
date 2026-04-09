@@ -164,7 +164,7 @@ export const audiometriaRouter = router({
         mediaOD: input.mediaOD ? input.mediaOD.toString() : null,
         mediaOE: input.mediaOE ? input.mediaOE.toString() : null,
       });
-      return { id: (result as any).insertId };
+      return { id: result!.id };
     }),
 
   update: protectedProcedure
@@ -224,7 +224,7 @@ export const audiometriaRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const result = await createParecerModelo({ ...input, userId: ctx.user.id });
-      return { id: (result as any).insertId };
+      return { id: result!.id };
     }),
 
   updateParecerModelo: protectedProcedure

@@ -17,8 +17,8 @@ import {
 export async function createExameAudiometrico(data: InsertExameAudiometrico) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [result] = await db.insert(examesAudiometricos).values(data);
-  return result;
+  const result = await db.insert(examesAudiometricos).values(data).returning({ id: examesAudiometricos.id });
+  return result[0];
 }
 
 export async function updateExameAudiometrico(id: number, userId: number, data: Partial<InsertExameAudiometrico>) {
@@ -114,8 +114,8 @@ export async function deleteExameAudiometrico(id: number, userId: number) {
 export async function createParecerModelo(data: InsertParecerModelo) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [result] = await db.insert(pareceresModelo).values(data);
-  return result;
+  const result = await db.insert(pareceresModelo).values(data).returning({ id: pareceresModelo.id });
+  return result[0];
 }
 
 export async function updateParecerModelo(id: number, userId: number, data: Partial<InsertParecerModelo>) {
