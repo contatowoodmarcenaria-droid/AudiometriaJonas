@@ -58,9 +58,18 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+
+    // For name: on conflict, only fill if the existing DB value is NULL.
+    // This prevents external auth providers (Supabase) from overwriting
+    // a name the user explicitly set via updateUserProfile.
+    const conflictSet: Record<string, unknown> = { ...updateSet };
+    if ("name" in conflictSet && values.name !== undefined) {
+      conflictSet.name = sql`COALESCE(${users.name}, ${values.name as string | null})`;
+    }
+
     await db.insert(users).values(values).onConflictDoUpdate({
       target: users.openId,
-      set: updateSet,
+      set: conflictSet,
     });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
