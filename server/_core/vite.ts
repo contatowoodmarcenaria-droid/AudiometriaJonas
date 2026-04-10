@@ -91,7 +91,8 @@ export function serveStatic(app: Express) {
   // SPA fallback: serve index.html for navigation routes only.
   // For any request that looks like a static asset (has a file extension),
   // return 404 — never serve HTML in place of a missing JS/CSS/font file.
-  app.use("*", (req, res) => {
+  const indexHtml = path.resolve(distPath, "index.html");
+  app.use((req, res) => {
     const ext = path.extname(req.path);
     if (ext && ext !== ".html") {
       res.status(404).set("Cache-Control", "no-store").end("Not found");
@@ -101,6 +102,11 @@ export function serveStatic(app: Express) {
       .set("Cache-Control", "no-cache, no-store, must-revalidate")
       .set("Pragma", "no-cache")
       .set("Expires", "0")
-      .sendFile(path.resolve(distPath, "index.html"));
+      .sendFile(indexHtml, (err) => {
+        if (err) {
+          console.error("[SPA fallback] Failed to serve index.html:", err.message, "| path:", indexHtml);
+          res.status(500).end("Server error");
+        }
+      });
   });
 }
