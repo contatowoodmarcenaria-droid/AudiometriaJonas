@@ -13,5 +13,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storageKey: "fono-ocupacional-auth",
+    flowType: "implicit",
   },
 });
