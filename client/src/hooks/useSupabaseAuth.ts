@@ -33,7 +33,7 @@ export function useSupabaseAuth() {
       password,
       options: {
         data: { full_name: name, name },
-        emailRedirectTo: `${import.meta.env.VITE_APP_URL || window.location.origin}/auth/callback`,
+        emailRedirectTo: "https://audiometriajonas.onrender.com/auth/callback",
       },
     });
     if (error) throw error;

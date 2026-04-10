@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Eye, EyeOff, Loader2, Headphones } from "lucide-react";
+import { Eye, EyeOff, Loader2, Headphones, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { AudioWaves } from "@/components/AudioWaves";
 import { supabase } from "@/lib/supabase";
 import { useSession } from "@/lib/sessionContext";
+
+const AUTH_CALLBACK_URL = "https://audiometriajonas.onrender.com/auth/callback";
 
 function useRipple() {
   const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
@@ -30,6 +32,36 @@ export default function Login() {
   const { session, loading: checkingSession } = useSession();
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { ripples: btnRipples, addRipple: addBtnRipple } = useRipple();
+
+  // Forgot-password state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail || !/\S+@\S+\.\S+/.test(forgotEmail)) {
+      toast.error("Digite um email válido");
+      return;
+    }
+    setIsSendingReset(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: AUTH_CALLBACK_URL,
+      });
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Email de redefinição enviado! Verifique sua caixa de entrada.");
+        setShowForgot(false);
+        setForgotEmail("");
+      }
+    } catch {
+      toast.error("Erro ao enviar email. Tente novamente.");
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
 
   useEffect(() => {
     if (!checkingSession && session) {
@@ -179,7 +211,60 @@ export default function Login() {
             <p className="text-[#64748b] text-sm">Entre com seu email e senha para acessar o sistema</p>
           </div>
 
-          {/* Form */}
+          {/* Forgot-password panel */}
+          {showForgot ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4" style={{ animation: "fadeInUp 0.3s ease-out both" }}>
+              <button
+                type="button"
+                onClick={() => setShowForgot(false)}
+                className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium mb-2 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Voltar ao login
+              </button>
+              <div>
+                <h3 className="text-lg font-bold text-[#0B1E3C] mb-1">Redefinir senha</h3>
+                <p className="text-sm text-[#64748b] mb-4">
+                  Digite seu email e enviaremos um link para criar uma nova senha.
+                </p>
+                <label className="block text-sm font-semibold text-[#1e293b] mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  onFocus={() => setFocusedField("forgotEmail")}
+                  onBlur={() => setFocusedField(null)}
+                  placeholder="seu@email.com"
+                  autoComplete="email"
+                  disabled={isSendingReset}
+                  className="w-full h-12 px-4 rounded-xl text-sm text-[#0B1E3C] placeholder:text-slate-400 outline-none transition-all duration-200"
+                  style={{
+                    border: focusedField === "forgotEmail" ? "1.5px solid #4F46E5" : "1.5px solid #e2e8f0",
+                    boxShadow: focusedField === "forgotEmail" ? "0 0 0 3px rgba(79,70,229,0.12)" : "none",
+                    background: "#fff",
+                  }}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSendingReset}
+                className="w-full h-12 rounded-xl font-semibold text-white text-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                style={{
+                  backgroundImage: isSendingReset ? "none" : "linear-gradient(135deg, #4F46E5 0%, #7c3aed 50%, #22C55E 100%)",
+                  backgroundColor: isSendingReset ? "#94a3b8" : "transparent",
+                  boxShadow: isSendingReset ? "none" : "0 4px 20px rgba(79,70,229,0.4)",
+                }}
+              >
+                {isSendingReset ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Enviando...
+                  </span>
+                ) : "Enviar link de redefinição"}
+              </button>
+            </form>
+          ) : (
+          /* Form */
           <form onSubmit={handleSubmit} className="space-y-5" style={{ animation: "fadeInUp 0.6s ease-out 0.4s both" }}>
             {/* Email */}
             <div>
@@ -211,7 +296,11 @@ export default function Login() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-semibold text-[#1e293b]">Senha</label>
-                <button type="button" className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                >
                   Esqueceu a senha?
                 </button>
               </div>
@@ -269,6 +358,7 @@ export default function Login() {
               ) : "Entrar"}
             </button>
           </form>
+          )}
 
           {/* Sign up link */}
           <p className="text-center text-sm text-[#64748b] mt-6" style={{ animation: "fadeIn 0.7s ease-out 0.8s both" }}>

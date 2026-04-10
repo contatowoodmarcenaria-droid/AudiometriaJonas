@@ -76,7 +76,7 @@ export default function Signup() {
         password,
         options: {
           data: { full_name: name.trim(), name: name.trim() },
-          emailRedirectTo: `${import.meta.env.VITE_APP_URL || window.location.origin}/auth/callback`,
+          emailRedirectTo: "https://audiometriajonas.onrender.com/auth/callback",
         },
       });
 

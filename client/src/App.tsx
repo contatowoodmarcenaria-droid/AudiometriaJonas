@@ -18,28 +18,67 @@ import ExameAudiometrico from "./pages/ExameAudiometrico";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { SessionProvider, useSession } from "@/lib/sessionContext";
+import { supabase } from "@/lib/supabase";
+import ResetPassword from "./pages/ResetPassword";
 
 // ─── Auth Callback ────────────────────────────────────────────────────────────
+// Handles both email confirmation and password-reset links.
+// With flowType:'implicit', Supabase puts tokens directly in the URL hash —
+// no code exchange needed; the SDK processes them via detectSessionInUrl:true.
 
 function AuthCallback() {
   const [, navigate] = useLocation();
-  const { session, loading } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState("Processando link...");
 
   useEffect(() => {
-    if (loading) return;
+    let cancelled = false;
 
-    if (session) {
-      navigate("/dashboard", { replace: true });
+    // Parse the hash fragment that Supabase appends to the redirect URL
+    const hash = window.location.hash.slice(1);
+    const params = new URLSearchParams(hash);
+    const type = params.get("type");
+    const accessToken = params.get("access_token");
+
+    // Password-reset link: type=recovery
+    if (type === "recovery" && accessToken) {
+      navigate("/reset-password", { replace: true });
       return;
     }
 
-    const timeout = setTimeout(() => {
-      setError("Erro ao confirmar email. Tente fazer login.");
-    }, 5000);
+    // Email confirmation (type=signup / email_change) or any other event:
+    // SDK fires onAuthStateChange automatically; we listen and redirect to login.
+    setMessage("Confirmando email...");
 
-    return () => clearTimeout(timeout);
-  }, [session, loading, navigate]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (cancelled) return;
+      if (event === "SIGNED_IN") {
+        navigate("/login", { replace: true });
+      } else if (event === "PASSWORD_RECOVERY") {
+        navigate("/reset-password", { replace: true });
+      }
+    });
+
+    // In case the event already fired before our listener attached
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled || !session) return;
+      if (type === "recovery") {
+        navigate("/reset-password", { replace: true });
+      } else {
+        navigate("/login", { replace: true });
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      if (!cancelled) setError("Erro ao processar link. Tente fazer login.");
+    }, 8000);
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, [navigate]);
 
   if (error) {
     return (
@@ -56,7 +95,7 @@ function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-[#0B1E3C]">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-        <p className="text-sm text-indigo-200">Confirmando email...</p>
+        <p className="text-sm text-indigo-200">{message}</p>
       </div>
     </div>
   );
@@ -132,6 +171,7 @@ function AppRouter() {
   if (location === "/login") return <Login />;
   if (location === "/signup") return <Signup />;
   if (location === "/auth/callback") return <AuthCallback />;
+  if (location === "/reset-password") return <ResetPassword />;
 
   // Protected routes — need session
   if (!session) return <RedirectToLogin />;
