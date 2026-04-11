@@ -14,25 +14,49 @@ type SupabaseAuthContextType = {
 
 const SupabaseAuthContext = createContext<SupabaseAuthContextType | null>(null);
 
+async function purgeCorruptedSession(): Promise<void> {
+  try {
+    await supabase.auth.signOut();
+  } catch {}
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith("sb-") || k.includes("fono-ocupacional-auth"))
+    .forEach((k) => localStorage.removeItem(k));
+  sessionStorage.clear();
+  window.location.replace("/login");
+}
+
 export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth
+      .getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          purgeCorruptedSession();
+          return;
+        }
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      })
+      .catch(() => {
+        purgeCorruptedSession();
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESHED" && !session) {
+        purgeCorruptedSession();
+        return;
+      }
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
 
     return () => subscription.unsubscribe();
   }, []);
@@ -60,11 +84,9 @@ export function SupabaseAuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SupabaseAuthContext.Provider value={{
-      user, session, loading,
-      isAuthenticated: !!user,
-      signUp, signIn, signOut,
-    }}>
+    <SupabaseAuthContext.Provider
+      value={{ user, session, loading, isAuthenticated: !!user, signUp, signIn, signOut }}
+    >
       {children}
     </SupabaseAuthContext.Provider>
   );
