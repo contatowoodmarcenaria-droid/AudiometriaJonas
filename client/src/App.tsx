@@ -22,9 +22,15 @@ import { supabase } from "@/lib/supabase";
 import ResetPassword from "./pages/ResetPassword";
 
 // ─── Auth Callback ────────────────────────────────────────────────────────────
-// Handles both email confirmation and password-reset links.
-// With flowType:'implicit', Supabase puts tokens directly in the URL hash —
-// no code exchange needed; the SDK processes them via detectSessionInUrl:true.
+// Handles email confirmation and password-reset links in two formats:
+//
+//  1. Query params (new Supabase email templates):
+//     /auth/callback?token_hash=xxx&type=recovery
+//     → calls verifyOtp({ token_hash, type }) to exchange for a session
+//
+//  2. Hash fragment (implicit flow, legacy templates):
+//     /auth/callback#access_token=xxx&type=signup
+//     → SDK processes automatically via detectSessionInUrl:true
 
 function AuthCallback() {
   const [, navigate] = useLocation();
@@ -34,49 +40,96 @@ function AuthCallback() {
   useEffect(() => {
     let cancelled = false;
 
-    // Parse the hash fragment that Supabase appends to the redirect URL
-    const hash = window.location.hash.slice(1);
-    const params = new URLSearchParams(hash);
-    const type = params.get("type");
-    const accessToken = params.get("access_token");
+    async function handleCallback() {
+      // ── Format 1: query params (?token_hash=xxx&type=yyy) ──────────────────
+      const searchParams = new URLSearchParams(window.location.search);
+      const tokenHash = searchParams.get("token_hash");
+      const typeParam = searchParams.get("type") as
+        | "signup"
+        | "recovery"
+        | "email_change"
+        | "invite"
+        | null;
 
-    // Password-reset link: type=recovery
-    if (type === "recovery" && accessToken) {
-      navigate("/reset-password", { replace: true });
-      return;
+      if (tokenHash && typeParam) {
+        setMessage(
+          typeParam === "recovery" ? "Verificando link de senha..." : "Confirmando email..."
+        );
+
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: typeParam,
+        });
+
+        if (cancelled) return;
+
+        if (otpError) {
+          setError(`Erro ao verificar link: ${otpError.message}`);
+          return;
+        }
+
+        // Token valid — session is now established by the SDK.
+        // Clean up the token_hash from the URL before redirecting.
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState(null, "", cleanUrl);
+
+        if (typeParam === "recovery") {
+          navigate("/reset-password", { replace: true });
+        } else {
+          navigate("/login", { replace: true });
+        }
+        return;
+      }
+
+      // ── Format 2: hash fragment (#access_token=xxx&type=yyy) ───────────────
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
+      const hashType = hashParams.get("type");
+      const accessToken = hashParams.get("access_token");
+
+      if (hashType === "recovery" && accessToken) {
+        navigate("/reset-password", { replace: true });
+        return;
+      }
+
+      // Email confirmation or other — SDK fires onAuthStateChange automatically.
+      setMessage("Confirmando email...");
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (cancelled) return;
+        if (event === "SIGNED_IN") {
+          navigate("/login", { replace: true });
+        } else if (event === "PASSWORD_RECOVERY") {
+          navigate("/reset-password", { replace: true });
+        }
+      });
+
+      // In case the event already fired before our listener attached
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!cancelled && session) {
+        subscription.unsubscribe();
+        if (hashType === "recovery") {
+          navigate("/reset-password", { replace: true });
+        } else {
+          navigate("/login", { replace: true });
+        }
+        return;
+      }
+
+      // Fallback timeout if no event fires
+      const timeout = setTimeout(() => {
+        if (!cancelled) setError("Erro ao processar link. Tente fazer login.");
+      }, 8000);
+
+      return () => {
+        subscription.unsubscribe();
+        clearTimeout(timeout);
+      };
     }
 
-    // Email confirmation (type=signup / email_change) or any other event:
-    // SDK fires onAuthStateChange automatically; we listen and redirect to login.
-    setMessage("Confirmando email...");
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (cancelled) return;
-      if (event === "SIGNED_IN") {
-        navigate("/login", { replace: true });
-      } else if (event === "PASSWORD_RECOVERY") {
-        navigate("/reset-password", { replace: true });
-      }
-    });
-
-    // In case the event already fired before our listener attached
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (cancelled || !session) return;
-      if (type === "recovery") {
-        navigate("/reset-password", { replace: true });
-      } else {
-        navigate("/login", { replace: true });
-      }
-    });
-
-    const timeout = setTimeout(() => {
-      if (!cancelled) setError("Erro ao processar link. Tente fazer login.");
-    }, 8000);
+    handleCallback();
 
     return () => {
       cancelled = true;
-      subscription.unsubscribe();
-      clearTimeout(timeout);
     };
   }, [navigate]);
 
